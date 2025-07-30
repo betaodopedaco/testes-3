@@ -1,0 +1,41 @@
+from playwright.sync_api import sync_playwright
+from geolocation import get_bing_coords
+import time
+
+def scrape_bing_maps(search_term, location, num_items=10):
+    try:
+        lat, lon = get_bing_coords(location)
+        results = []
+        
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--disable-gpu", "--no-sandbox"]
+            )
+            page = browser.new_page()
+            
+            page.goto(f"https://www.bing.com/maps?cp={lat}~{lon}&lvl=12")
+            time.sleep(2)
+            
+            page.locator("input#maps_sb").fill(f"{search_term} near me")
+            page.keyboard.press("Enter")
+            time.sleep(3)
+            
+            listings = page.locator("div.b_directoryList > div")
+            
+            for i in range(min(num_items, listings.count())):
+                item = listings.nth(i)
+                results.append({
+                    "name": item.locator("a").inner_text(),
+                    "address": item.locator("div.b_address").inner_text(),
+                    "phone": item.locator("div.b_phone").inner_text() if item.locator("div.b_phone").is_visible() else "Não disponível",
+                    "website": item.locator("a.b_secondaryText").get_attribute("href") if item.locator("a.b_secondaryText").is_visible() else ""
+                })
+            
+            browser.close()
+        
+        return results
+    
+    except Exception as e:
+        print(f"Erro no scraping: {e}")
+        return []
